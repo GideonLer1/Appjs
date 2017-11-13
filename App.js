@@ -438,9 +438,9 @@ if(isDefined(contexts[0])&& contexts[0].name=='feedback'&&contexts[0].parameters
 
 	if (feed_back != '' && email_user!= '' )
 	 {
-		let user = usersMap.get(userId);
-		 
-		let emailContent = 'New feedback: '+feed_back+'from'+userID+'User email: '+email_user;
+		//let user = usersMap.get(userId);
+		// +userID+
+		let emailContent = 'New feedback: '+feed_back+'from'+'User email: '+email_user;
 		sendEmail('New feedback',emailContent);
 	    
 	 }
