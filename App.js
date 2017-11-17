@@ -1,6 +1,7 @@
-'use strict';
+ 'use strict';
 
 
+//TWO
 //load config file
 const apiai = require('apiai');
 const config = require('./config');
@@ -12,7 +13,9 @@ const pg = require ('pg');
 const app = express();//express
 const uuid = require('uuid');
 const userData= require('./user');
-
+const passport = require('passport');
+const FacebookStrategy =require('passport-facebook').Strategy;
+const session = require('express-session');
 
 pg.defaults.ssl=true;
 // Messenger API parameters
@@ -74,6 +77,126 @@ const usersMap = new Map();
 app.get('/', function (req, res) {
 	res.send('Hello world, I am a chat bot')
 })
+
+
+
+
+
+
+
+// //EJS
+// pg.defaults.ssl = true;
+
+
+//var pg = require('pg');
+pg.defaults.ssl = true;
+app.use(session(
+
+	{
+		secret : 'gideonler123',
+		resave : true,
+		saveUninitialized: true
+
+	}
+));
+
+ app.use(passport.initialize());
+ app.use(passport.session());
+
+passport.serializeUser(function(profile, cb) {//cb=callback
+	cb(null, profile);
+  });
+  
+  passport.deserializeUser(function(profile, cb) {
+	cb(null, profile);
+  });
+
+ app.set('view engine', 'ejs');
+
+  app.get('/auth/facebook', passport.authenticate('facebook' ,{scope: 'public_profile'}));//authenticate once user logs in
+  app.get('/auth/facebook/callback', passport.authenticate( 'facebook',{ successRedirect : '/broadcast',failureRedirect:'/'} ));
+
+
+
+passport.use(new FacebookStrategy({//fb logn setup passport
+    clientID: config.FB_APP_ID,
+    clientSecret: config.FB_APP_SECRET,
+    callbackURL: config.SERVER_URL+ "auth/facebook/callback"
+  },
+  function(accessToken, refreshToken, profile, cb) {
+  
+   process.nextTick(function (){
+	  
+	return cb(null,profile);
+   });
+  }
+));
+
+
+
+
+// Index route
+app.get('/', function (req, res) {
+//hello world
+	res.render('login');//check if theres login file
+});
+
+app.get('/no-access', function (req, res) {
+
+	res.render('no-access');//check if theres login file
+});
+
+app.get('/broadcast',ensureAuthenticated, function (req, res) {
+
+	res.render('broadcast', {user: req.user});//check if theres login file
+});
+
+app.post('/broadcast',ensureAuthenticated, function (req, res) {
+
+	res.render('broadcast-confirm');//check if theres login file
+});
+
+app.get('/broadcast-send',ensureAuthenticated, function (req, res) {
+
+	res.redirect('broadcast-sent');//check if theres login file
+});
+
+app.get('/broadcast-sent',ensureAuthenticated, function (req, res) {
+
+	res.redirect('broadcast-sent');
+});
+
+app.get('/logout',ensureAuthenticated, function (req, res) {
+
+	req.logout();
+	res.redirect('/');
+});
+
+function  ensureAuthenticated(req, res, next){
+	if(req.isAuthenticated()){
+		return next();
+	}else{
+		res.redirect('/');
+	}
+}
+
+
+
+// const apiAiService = apiai(config.API_AI_CLIENT_ACCESS_TOKEN, {
+// 	language: "en",
+// 	requestSource: "fb"
+// });
+
+//end of ejs
+
+
+
+
+
+
+
+
+
 
 // for Facebook verification
 app.get('/webhook/', function (req, res) {
@@ -200,116 +323,109 @@ function handleMessageAttachments(messageAttachments, senderID){
 	//for now just reply
 	sendTextMessage(senderID, "Attachment received. Thank you.");	
 }
+// function handleQuickReply(senderID, quickReply, messageId) {
+// 	var quickReplyPayload = quickReply.payload;
+// 	console.log("Quick reply for message %s with payload %s", messageId, quickReplyPayload);
+// 	//send payload to api.ai 
 
+// 	sendToApiAi(senderID, quickReplyPayload);
 
-
-
-//TEST
-var readUsers={
- readAllUsers: function (callback, newstype) {//readallusers
-	var pool = new pg.Pool(config.PG_CONFIG);
-	pool.connect(function(err, client, done) {
-		if (err) {
-			return console.error('Error acquiring client', err.stack);
-		}
-		client.query(
-				'SELECT fb_id, first_name, last_name FROM users WHERE newsletter=$1',
-				[newstype],
-				function(err, result) {
-					if (err) {
-						console.log(err);
-						callback([]);
-					} else {
-						console.log('rows');
-						console.log(result.rows);
-						callback(result.rows);
-					};
-				});
-		done();
-	});
-	pool.end();
-}
-}
-
-var newsSettings={ // for subscribing to news per week/day
- newsletterSettings: function (callback, setting, userId) {//newslettersetting
-	var pool = new pg.Pool(config.PG_CONFIG);
-	pool.connect(function(err, client, done) {
-		if (err) {
-			return console.error('Error acquiring client', err.stack);
-		}
-		client.query(
-				'UPDATE users SET newsletter=$1 WHERE fb_id=$2',//1=per week, 2=per day
-				[setting, userId],
-				function(err, result) {
-					if (err) {
-						console.log(err);
-						callback(false);
-					} else {
-						callback(true);
-					};
-				});
-		done();
-	});
-	pool.end();
-}
-}
-
-//TEST
-
-
-
+// }
 function handleQuickReply(senderID, quickReply, messageId) {
-
-	var quickReplyPayload = quickReply.payload;
-	//console.log("Quick reply for message %s with payload %s", messageId, quickReplyPayload);
-	//send payload to api.ai
-	//
 	var quickReplyPayload = quickReply.payload;
 
-  switch (quickReplyPayload){
-
-  case 'NEWS_PER_WEEK':
-
-  //var newsSettings= require ("./user");
-  
-newsSettings.newsletterSettings( function(updated){//userService. creating updated function
+switch (quickReplyPayload){
 
 
-      if(updated){
-		  sendTextMessage(senderID,"Thanks for subscribing"+
-		  "to unsubscribe just type 'unsub'");//fbService
+	case 'NEWS_PER_WEEK':
+	 newsSettings.newsletterSettings(function(updated){
+       if(updated){
 
-	  }else{
+		sendTextMessage(senderID,"Thanks for subscribing"+
+		        "to unsubscribe just type 'unsub'");//fbService
+	   }else{
 		sendTextMessage(senderID,"Newsletter unavailable at the moment"+
-		"try again later");//fbService
-	  }
- }, 1,senderID);
-  break;
+		      "try again later");//fbService
+	   }
+	 },1,senderID);
+	break;
 
-  case 'NEWS_PER_DAY':
-
-newsSettings.newsletterSettings(function(updated){//userService. creating updated function
-	
-		  if(updated){
-			  sendTextMessage(senderID,"Thanks for subscribing"+
-			  "to unsubscribe just type 'unsub'");//fbService
-	
-		  }else{
-			sendTextMessage(senderID,"Newsletter unavailable at the moment"+
-			"try again later");//fbService
-		  }
-	 }, 2,senderID);
-  break;
-  default:
-  sendToApiAi(sessionIds,handleApiAiResponse,senderID,quickReplyPayload);
- }
+	case 'NEWS_PER_DAY':
+	newsSettings.newsletterSettings(function(updated){
+		if(updated){
+ 
+		 sendTextMessage(senderID,"Thanks for subscribing"+
+				 "to unsubscribe just type 'unsub'");//fbService
+		}else{
+		 sendTextMessage(senderID,"Newsletter unavailable at the moment"+
+			   "try again later");//fbService
+		}
+	  },2,senderID);
 
 
+
+
+	break;
+
+	default:
+	sendToApiAi(senderID, quickReplyPayload,sessionIds,handleApiAiAction);
+}
 
 	console.log("Quick reply for message %s with payload %s", messageId, quickReplyPayload);
+	//send payload to api.ai 
+	
 
 }
+// function handleQuickReply(senderID, quickReply, messageId) {
+
+//  var quickReplyPayload = quickReply.payload;
+//  console.log("Quick reply for message %s with payload %s", messageId, quickReplyPayload);
+//  //send payload to api.ai
+//  //
+
+
+//   switch (quickReplyPayload){
+
+//   case 'NEWS_PER_WEEK':
+
+//   //var newsSettings= require ("./user");
+  
+// newsSettings.newsletterSettings( function(updated){//userService. creating updated function
+
+//       if(updated){
+//        sendTextMessage(senderID,"Thanks for subscribing"+
+//        "to unsubscribe just type 'unsub'");//fbService
+
+//    }else{
+//      sendTextMessage(senderID,"Newsletter unavailable at the moment"+
+//      "try again later");//fbService
+//    }
+//  }, 1,senderID);
+//   break;
+
+//   case 'NEWS_PER_DAY':
+
+// newsSettings.newsletterSettings(function(updated){//userService. creating updated function
+    
+//        if(updated){
+//            sendTextMessage(senderID,"Thanks for subscribing"+
+//            "to unsubscribe just type 'unsub'");//fbService
+    
+//        }else{
+//          sendTextMessage(senderID,"Newsletter unavailable at the moment"+
+//          "try again later");//fbService
+//        }
+//   }, 2,senderID);
+//   break;
+//   default:
+//   sendToApiAi(sessionIds,handleApiAiResponse,senderID,quickReplyPayload);
+//  }
+
+
+//  console.log("Quick reply for message %s with payload %s", messageId, quickReplyPayload);
+
+// }
+
 
 //https://developers.facebook.com/docs/messenger-platform/webhook-reference/message-echo
 function handleEcho(messageId, appId, metadata) {
@@ -317,112 +433,122 @@ function handleEcho(messageId, appId, metadata) {
 	console.log("Received echo for message %s and app %d with metadata %s", messageId, appId, metadata);
 }
 
+
+
+
+//TEST
+var readUsers={
+ readAllUsers: function (callback, newstype) {//readallusers
+ var pool = new pg.Pool(config.PG_CONFIG);
+ pool.connect(function(err, client, done) {
+     if (err) {
+         return console.error('Error acquiring client', err.stack);
+     }
+     client.query(
+             'SELECT fb_id, first_name, last_name FROM users WHERE newsletter=$1',
+             [newstype],
+             function(err, result) {
+                 if (err) {
+                     console.log(err);
+                     callback([]);
+                 } else {
+                     console.log('rows');
+                     console.log(result.rows);
+                     callback(result.rows);
+                 };
+             });
+     done();
+ });
+ pool.end();
+}
+}
+
+var newsSettings={ // for subscribing to news per week/day
+ newsletterSettings: function (callback, setting, userId) {//newslettersetting
+ var pool = new pg.Pool(config.PG_CONFIG);
+ pool.connect(function(err, client, done) {
+     if (err) {
+         return console.error('Error acquiring client', err.stack);
+     }
+     client.query(
+             'UPDATE users SET newsletter=$1 WHERE fb_id=$2',//1=per week, 2=per day
+             [setting, userId],
+             function(err, result) {
+                 if (err) {
+                     console.log(err);
+                     callback(false);
+                 } else {
+                     callback(true);
+                 };
+             });
+     done();
+ });
+ pool.end();
+}
+}
+
+//TEST
+
+
+
+
+
 function handleApiAiAction(sender, action, responseText, contexts, parameters) { //handles api inquiree
 switch (action) {
 
-case " testfeed2":
-let replies=[
-    {
-		"content_type":"text",
-		"title":"Student development",
-		"payload":"STUD_DEV_PAYLOAD"
+case "get-school-subjects":
 
-		
-    },
+if(parameters.hasOwnProperty("Singapore-schools")&&parameters["Singapore-schools"]!=''){
+
+
+
+var request=require('request');
+request ({
+	url:'https://data.gov.sg/api/action/datastore_search', //URL to hit
+	qs:{
+		resource_id:parameters["Singapore-schools"]
+
+
+},
+
+}, function (error, response, body ){
+
+
+	if(!error&&response.statusCode==200)
 	{
-		"content_type":"text",
-		"title":"Others",
-		"payload":"OTHERS_PAYLOAD"
+	  let subjects=json.parse(body);//records of json subjectes
+	  if(subjects.hasOwnProperty("records"))
+	  {
+		let reply = `${responseText} ${subjects["records"][0,1,2,3,4,5,6,7,8]["description"]}`;
+		sendTextMessage(sender,reply);
+	  }
+	  else
+	  {
+		  sendTextMessage(sender, `No school available for ${parameters["Singapore-schools"]}`)
+	  }
 
-		
-    },
-  ];
-sendQuickReply(sender,responseText,replies);
+	}else
+	{
+		console.error(response.error);
+	}
 
+});
+
+
+
+
+}
+else
+{
+	sendTextMessage(sender,responseText);
+}
 break;
 
 
-case "unsubscribe":
-
-
-newsSettings.newsletterSettings(function(updated){//userService.
-	
-	if(updated){
-		sendTextMessage(sender,"You are now unsubscribed, I shan't disturb you anymore :)");// fbService.
-	}
-else{
-	sendTextMessage(sender,"Newsletter unavailable at the moment");// fbService.
-}
-
-
-},0,sender);//0 = unsub
 
 
 
-// case "get-school-subjects":
-
-// if(parameters.hasOwnProperty("Singapore-schools")&&parameters["Singapore-schools"]!=''){
-
-
-
-// var request=require('request');
-// request ({
-// 	url:'https://data.gov.sg/api/action/datastore_search', //URL to hit
-// 	qs:{
-// 	//	resource_id:parameters["Singapore-schools"],
-// 	resource_id:'3bb9e6b0-6865-4a55-87ba-cc380bc4df39',
-// 		limit: 10 // get 5 results
-// 		//q: 'jones' // query for 'jones'
-
-
-// },
-
-// }, function (error, response, body ){
-
-
-// 	if(!error&&response.statusCode==200)
-// 	{
-// 	  let subjects=json.parse(body);//records of json subjectes
-// 	  if(subjects.hasOwnProperty("records"))
-// 	  {
-// 		let reply = `${responseText} ${subjects["records"][0]["description"]}`;
-// 		sendTextMessage(sender,reply);
-// 	  }
-// 	  else
-// 	  {
-// 		  sendTextMessage(sender, `No school available for ${parameters["Singapore-schools"]}`)
-// 	  }
-
-// 	}else
-// 	{
-// 		console.error(response.error);
-// 	}
-
-// });
-
-
-
-
-// }
-// else
-// {
-// 	sendTextMessage(sender,responseText);
-// }
-// break;
-
-
-
-
-
-
-
-// 
-
-
-
-
-
-case "write-feedback"://api ai action
+   case "write-feedback"://api ai action
 
 //    if (isDefined(contexts[0]) &&
 // (contexts[0].name == 'feedback' || contexts[0].name == '82c0f3ea-7eb2-42e6-8dad-25ade6c929fd_id_dialog_context')//apiai context to refer
@@ -438,9 +564,9 @@ if(isDefined(contexts[0])&& contexts[0].name=='feedback'&&contexts[0].parameters
 
 	if (feed_back != '' && email_user!= '' )
 	 {
-		//let user = usersMap.get(userId);
-		// +userID+
-		let emailContent = 'New feedback: '+feed_back+'from'+'User email: '+email_user;
+		let user = usersMap.get(userId);
+		 
+		let emailContent = 'New feedback: '+feed_back+'from'+userID+'User email: '+email_user;
 		sendEmail('New feedback',emailContent);
 	    
 	 }
@@ -453,35 +579,6 @@ if(isDefined(contexts[0])&& contexts[0].name=='feedback'&&contexts[0].parameters
 	
 	
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-	  //end of handleapiaiaction
        break;
 
 		default:
@@ -491,45 +588,6 @@ if(isDefined(contexts[0])&& contexts[0].name=='feedback'&&contexts[0].parameters
 }
 
 
-// function performRequest(endpoint, method, data, success) { //google custom search
-// 	var dataString = JSON.stringify(data);
-// 	var headers = {};
-   
-// 	if (method == 'GET') {
-// 	 endpoint += '?' + querystring.stringify(data);
-// 	}
-// 	else {
-// 	 headers = {
-// 	  'Content-Type': 'application/json',
-// 	  'Content-Length': dataString.length
-// 	};
-//    }
-//    var options = {
-//    host: host,
-//    path: endpoint,
-//    method: method,
-//    headers: headers
-//    };
-   
-//    var req = https.request(options, function(res) {
-//    res.setEncoding('utf-8');
-   
-// 	var responseString = '';
-   
-// 	 res.on('data', function(data) {
-// 	 responseString += data;
-// 	});
-   
-// 	res.on('end', function() {
-// 	console.log(responseString);
-// 	var responseObject = JSON.parse(responseString);
-// 	success(responseObject);
-// 	});
-//    });
-   
-// 	req.write(dataString);
-// 	req.end();
-//    }
 
 
 
@@ -995,10 +1053,10 @@ function sendAccountLinking(recipientId) {
 function greetUserText(userId) {//greets uuser
 
    let user=usersMap.get(userId);
-	sendTextMessage(userId, "Welcome " + user.first_name + '✋');
+	sendTextMessage(userId, "Welcome " + user.first_name + 'âœ‹');
 
-	// //start
-	// //first read user firstname
+	//start
+	//first read user firstname
 	request({
 		uri: 'https://graph.facebook.com/v2.7/' + userId,
 		qs: {
@@ -1097,7 +1155,7 @@ function callSendAPI(messageData) {
 }
 
 function sendNewsNewsSubscribe(userId){
-let responseText="Sending the latest news ," +"How often would you like to receive them?";
+let responseText="Sending the latest news from schoolbag.sg," +"How often would you like to receive them?";
 
 let replies=[
     {
@@ -1117,7 +1175,6 @@ let replies=[
   ];
 
   sendQuickReply(userId,responseText,replies);//quick reply payload for user
-  //fbService
 }
 
 
@@ -1142,11 +1199,7 @@ function receivedPostback(event) {//handle payloads
 	switch (payload) {
 
 
-	  case 'FEEDBACK_PAYLOAD':
-	  sendToApiAi(senderID,"feedback");
-	  break;
-
-	  case 'Student development':// payload for menu
+	  case 'Student development':
 	  sendToApiAi(senderID,"Student development");
 	  break;
 
@@ -1166,7 +1219,7 @@ function receivedPostback(event) {//handle payloads
 	  sendToApiAi(senderID,"menu");
 	  break;
 
-	   case 'NEWS_NEWS'://NEWS FEATURES
+	   case 'NEWS_NEWS':
 	   sendNewsNewsSubscribe(senderID);
 	   break;
 
@@ -1374,83 +1427,3 @@ app.listen(app.get('port'), function () {
 
 
 
-// ///persistent menu
-// function addPersistentMenu(){
-// 	request({
-// 	   url: 'https://graph.facebook.com/v2.6/me/messenger_profile',
-// 	   qs: { access_token: PAGE_ACCESS_TOKEN },
-// 	   method: 'POST',
-// 	   json:{
-// 	 "get_started":{
-// 	   "payload":"FACEBOOK_WELCOME"
-// 	  }
-// 	}
-//    }, function(error, response, body) {
-// 	   console.log("Add persistent menu " + response)
-// 	   if (error) {
-// 		   console.log('Error sending messages: ', error)
-// 	   } else if (response.body.error) {
-// 		   console.log('Error: ', response.body.error)
-// 	   }
-//    })
-// 	request({
-// 	   url: 'https://graph.facebook.com/v2.6/me/messenger_profile',
-// 	   qs: { access_token: FB_PAGE_TOKEN },
-// 	   method: 'POST',
-// 	   json:{
-//    "persistent_menu":[
-// 	   {
-// 		 "locale":"default",
-// 		 "composer_input_disabled":true,
-// 		 "call_to_actions":[
-// 		   {
-// 			 "title":"Home",
-// 			 "type":"postback",
-// 			 "payload":"HOME"
-// 		   },
-// 		   {
-// 			 "title":"Nested Menu Example",
-// 			 "type":"nested",
-// 			 "call_to_actions":[
-// 			   {
-// 				 "title":"Who am I",
-// 				 "type":"postback",
-// 				 "payload":"WHO"
-// 			   },
-// 			   {
-// 				 "title":"Joke",
-// 				 "type":"postback",
-// 				 "payload":"joke"
-// 			   },
-// 			   {
-// 				 "title":"Contact Info",
-// 				 "type":"postback",
-// 				 "payload":"CONTACT"
-// 			   }
-// 			 ]
-// 		   },
-// 		   {
-// 			 "type":"web_url",
-// 			 "title":"Latest News",
-// 			 "url":"http://foxnews.com",
-// 			 "webview_height_ratio":"full"
-// 		   }
-// 		 ]
-// 	   },
-// 	   {
-// 		 "locale":"zh_CN",
-// 		 "composer_input_disabled":false
-// 	   }
-// 	   ]
-// 	   }
-   
-//    }, function(error, response, body) {
-// 	   console.log(response)
-// 	   if (error) {
-// 		   console.log('Error sending messages: ', error)
-// 	   } else if (response.body.error) {
-// 		   console.log('Error: ', response.body.error)
-// 	   }
-//    })
-   
-//    }
